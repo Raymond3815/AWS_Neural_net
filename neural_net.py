@@ -4,11 +4,16 @@ from pandas import read_csv
 import matplotlib.pyplot as plt
 
 
-def load_and_normalize_feed(path, otherStations=2, previousTimes=2, skiprows=0, nrow=None):
+def load_and_normalize_feed(path, otherStations=2, previousTimes=2, nrow=None):
+    if (nrow != None):
+        n = sum(1 for line in open(path))  # number of records in file
+        print("Selecting only", np.round(nrow * 100 / n, decimals=4), '% of', path)
+        nrow = sorted(np.random.choice(n, n-nrow, replace=False))
+    else:
+        nrow = 0
+
     print("Reading:", path)
-    # data = np.genfromtxt(path, delimiter=' ', dtype= np.float)
-    # data = np.loadtxt(path, delimiter=' ') # slow but effective
-    data = np.array(read_csv(path, delimiter=' ', skiprows=skiprows, nrows=nrow, header=None))
+    data = np.array(read_csv(path, delimiter=' ', skiprows=nrow, header=None))
     # do all distances
     # set = np.arange(0,otherStations*2, 2)
 
@@ -117,11 +122,11 @@ def neural_network_model(data):
 
 
     l1 = data @ h_l_1['weights'] + h_l_1['biases']
-    l1 = tf.nn.tanh(l1)
+    l1 = tf.nn.sigmoid(l1)
 
 
     l2 = l1 @ h_l_2['weights'] + h_l_2['biases']
-    l2 = tf.nn.tanh(l2)
+    l2 = tf.nn.sigmoid(l2)
 
 
 
@@ -162,10 +167,6 @@ def train_neural_network(x):
                 print('Epoch', epoch, '\t Train loss:', epoch_loss, "\t\t Test loss:",t_loss, '\t\t Test acc:', acc)
 
 
-
-
-
-
 if __name__ == "__main__":
     print("Loading in data ...")
 
@@ -174,17 +175,19 @@ if __name__ == "__main__":
     train_true = load_and_normalize_feed(bp + "raw_3+1_station_-10+15min_train_heavy.csv", otherStations=3, previousTimes=2)
     train_false = load_and_normalize_feed(bp + "raw_3+1_station_-10+15min_train_non_heavy.csv", otherStations=3, previousTimes=2, nrow=2*len(train_true))
     train_size = len(train_true) + len(train_false)
+    print("Train length:", train_size)
     test_true = load_and_normalize_feed(bp + "raw_3+1_station_-10+15min_test_heavy.csv", otherStations=3, previousTimes=2)
     test_false = load_and_normalize_feed(bp + "raw_3+1_station_-10+15min_test_non_heavy.csv", otherStations=3, previousTimes=2, nrow=2*len(test_true))
     test_size = len(test_true) + len(test_false)
+    print("Train length:", test_size)
 
     ## note training is now testing
 
     print("Initializing NN")
     # learning_rate = 0.001
-    n_epoch = 1000 + 1
+    n_epoch = 10000 + 1
     display_step = 100
-    batch_size = 1024
+    batch_size = 2048
 
 
     x = tf.placeholder(tf.float32, [None, 78])
@@ -197,7 +200,7 @@ if __name__ == "__main__":
     print("Starting training")
     train_neural_network(x)
 
-    print("Plotting training")
+    print("Plotting progress")
     plt.plot(train_loss_plot[0], train_loss_plot[1], label='Train loss')
     plt.plot(test_loss_plot[0], test_loss_plot[1], label='Test loss')
     plt.legend(loc='best')
