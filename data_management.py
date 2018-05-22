@@ -84,7 +84,6 @@ def loadCombinedData(specificStations = []):
         object[station]['data'] = pd.read_csv(fn, index_col=0, parse_dates=[0])
     return object
 
-
 # consider moving to C++ or finding handy function for
 def generateInputOutputSingleStation(combinedData = None, threshold = 8/12, previousTimes = 2, predictAhead=3):
     if (combinedData==None):
