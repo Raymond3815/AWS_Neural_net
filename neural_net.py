@@ -3,7 +3,6 @@ import numpy as np
 from pandas import read_csv
 import matplotlib.pyplot as plt
 
-
 def load_and_normalize_feed(path, otherStations=2, previousTimes=2, nrow=None):
     if (nrow != None):
         n = sum(1 for line in open(path))  # number of records in file
@@ -34,37 +33,60 @@ def load_and_normalize_feed(path, otherStations=2, previousTimes=2, nrow=None):
             data[:, j + i*6][s] *= -1
             data[:, j + i*6][s] += 360
 
+    # distance (0-20) (rel, location)
+    set = np.arange(0, otherStations * 2 + 0, 2)
+    data[:, set] /= 20
 
     # directions (0-360) (rel location, main wind dir)
     set = np.concatenate((np.arange(1,otherStations*2 + 1, 2), np.arange(otherStations * 2 + 4, otherStations*2 + 4 +  (1 + otherStations)*6*(previousTimes + 1), 6)))
-    data[:, set] /= 360
+    scaleVal = (285.87 - 102.37)
+    data[:, set] -= 102.37
+    data[:, set] /= scaleVal
 
 
     # air temperature main station
     set = np.arange(otherStations * 2 + 0, otherStations*2 + 0 + (1 + otherStations)*6*(previousTimes + 1), 6)
-    scaleVal = (17.94 - 5.04) / 2
-    data[:, set] -= 5.04 + scaleVal
+    scaleVal = (18.04 - 5.23)
+    data[:, set] -= 5.23
     data[:, set] /= scaleVal
 
 
     # relative humidity 0->1
     set = np.arange(otherStations * 2 + 1, otherStations * 2 + 1 + (1 + otherStations) * 6 * (previousTimes + 1), 6)
-    data[:, set] /= 100
+    scaleVal = (95.35 - 66.36)
+    data[:, set] -= 66.36
+    data[:, set] /= scaleVal
 
-    # vapor pressure -1->1
+    # vapor pressure 0->1
     set = np.arange(otherStations * 2 + 2, otherStations * 2 + 2 + (1 + otherStations) * 6 * (previousTimes + 1), 6)
-    scaleVal = (1.57 - 0.75) / 2
-    data[:, set] -= 0.75 + scaleVal
+    scaleVal = (1.55 - 0.74) / 2
+    data[:, set] -= 0.74
     data[:, set] /= scaleVal
 
     # wind speed 0->1
     set = np.arange(otherStations * 2 + 3, otherStations * 2 + 3 + (1 + otherStations) * 6 * (previousTimes + 1), 6)
-    data[:, set] /= 2.31
+    scaleVal = (3.15 - 0.62)
+    data[:, set] -= 0.62
+    data[:, set] /= scaleVal
 
     # rain 0 -> 1
     set = np.arange(otherStations * 2 + 5, otherStations * 2 + 5 + (1 + otherStations) * 6 * (previousTimes + 1), 6)
-    data[:, set] /= 0.58
+    data[:, set] /= 0.57
 
+
+    # Tair 0, RH 1, vapor_pressure_{Avg} 2, WindSpd_{Avg} 3, WindDir_{Avg} 4, Rain_{Tot} 5
+    ri = [1,2,3,4,5]
+    set = []
+    for i in ri:
+        set = np.concatenate((set,
+                              np.arange(otherStations * 2 + i, otherStations * 2 + i + (1 + otherStations) * 6 * (previousTimes + 1), 6)
+                              ))
+    # remove other stations
+    #set = np.concatenate((set, np.arange(6)))
+
+    #data = np.delete(data, np.s_[set], 1) # remove windspd
+
+    print(len(data[0]), 'inputs')
     return data
 
 
@@ -81,7 +103,7 @@ def get_train_batch(batch_size):
     ))
     y = np.zeros((batch_size, 2))
     y[:n_true, 0] = 1
-    y[n_false:, 1] = 1
+    y[n_true:, 1] = 1
 
     return x, y
 
@@ -99,17 +121,12 @@ def get_test_batch(batch_size = None): # send all
     ))
     y = np.zeros((batch_size, 2))
     y[:n_true, 0] = 1
-    y[n_false:, 1] = 1
+    y[n_true:, 1] = 1
 
     return x, y
 
 
 def neural_network_model(data):
-    # hyper parameters
-    n_hidden_1 = 120
-    n_hidden_2 = 20
-    n_input = 78
-    n_output = 2
 
     print("Variables:", (n_input+1)*n_hidden_1 + (n_hidden_1+1)*n_hidden_2 + (n_hidden_2 + 1)*n_output)
 
@@ -152,6 +169,9 @@ def train_neural_network(x):
     correct = tf.equal(tf.argmax(s_prediction, 1), tf.argmax(y, 1))
     accuracy = tf.reduce_mean(tf.cast(correct, tf.float32))
 
+    cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(logits=prediction, labels=y))
+    optimizer = tf.train.AdamOptimizer().minimize(cost)
+
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
 
@@ -160,7 +180,7 @@ def train_neural_network(x):
             epoch_loss = 0
             for _ in range(int(train_size/batch_size)):
                 epoch_x, epoch_y = get_train_batch(batch_size)
-                _, c = sess.run([optimizer, cost], feed_dict={x: epoch_x, y: epoch_y})
+                _, c, train_acc = sess.run([optimizer, cost, accuracy], feed_dict={x: epoch_x, y: epoch_y})
                 epoch_loss += c
 
             epoch_loss /= int(train_size/batch_size)
@@ -169,39 +189,53 @@ def train_neural_network(x):
             train_loss_plot[1].append(epoch_loss)
             if (epoch % display_step == 0):
                 test_x, test_y = get_test_batch()
-                t_loss, acc, f_p =  sess.run([cost, accuracy, false_positive], feed_dict={x: test_x, y: test_y})
+                t_loss, acc, f_p = sess.run([cost, accuracy, false_positive], feed_dict={x: test_x, y: test_y})
+
+                # all relative to full testing size
+                f_n = 1 - acc - f_p
+                t_p = len(test_true)/test_size - f_n
+                t_n = len(test_false)/test_size - f_p
+
                 test_loss_plot[0].append(epoch)
                 test_loss_plot[1].append(t_loss)
                 test_acc_plot[0].append(epoch)
                 test_acc_plot[1].append(acc)
-                print('Epoch', epoch, '\t Train loss:', epoch_loss,
-                      "\t\t Test loss:",t_loss, '\t\t Test acc:', acc, '\t False pos:', f_p, 'False neg:', 1-acc-f_p)
+                print('Epoch', epoch, '\t Train loss:', epoch_loss, '\t acc: ', train_acc,
+                      "\t\t Test loss:",t_loss, '\t\tacc:', acc,
+                      '\t False pos:', f_p, '\tFalse neg:', f_n,
+                      "\t True pos:", t_p, "\t True neg:", t_n)
 
 
 if __name__ == "__main__":
     print("Loading in data ...")
 
+    nNoHeavy = 8
 
     bp = "C:\\Users\\raymo\\Desktop\\nn_input\\"
     train_true = load_and_normalize_feed(bp + "raw_3+1_station_-10+15min_train_heavy.csv", otherStations=3, previousTimes=2)
-    train_false = load_and_normalize_feed(bp + "raw_3+1_station_-10+15min_train_non_heavy.csv", otherStations=3, previousTimes=2, nrow=8*len(train_true))
+    train_false = load_and_normalize_feed(bp + "raw_3+1_station_-10+15min_train_non_heavy.csv", otherStations=3, previousTimes=2, nrow=nNoHeavy*len(train_true))
     train_size = len(train_true) + len(train_false)
-    print("Train length:", train_size)
+    print("Train length:", train_size, 'ratio:', len(train_true)/train_size)
     test_true = load_and_normalize_feed(bp + "raw_3+1_station_-10+15min_test_heavy.csv", otherStations=3, previousTimes=2)
-    test_false = load_and_normalize_feed(bp + "raw_3+1_station_-10+15min_test_non_heavy.csv", otherStations=3, previousTimes=2, nrow=10*len(test_true))
+    test_false = load_and_normalize_feed(bp + "raw_3+1_station_-10+15min_test_non_heavy.csv", otherStations=3, previousTimes=2, nrow=nNoHeavy*len(test_true))
     test_size = len(test_true) + len(test_false)
-    print("Train length:", test_size)
+    print("Test length:", test_size, 'ratio:', len(test_true)/test_size)
 
     ## note training is now testing
 
     print("Initializing NN")
-    # learning_rate = 0.001
+
+    # hyper parameters
     n_epoch = 1000 + 1
-    display_step = 100
-    batch_size = 1024
+    display_step = 10
+    batch_size = 512
 
+    n_input = 78  # - 5*12
+    n_hidden_1 = 40  # 120
+    n_hidden_2 = 5  # 20
+    n_output = 2
 
-    x = tf.placeholder(tf.float32, [None, 78])
+    x = tf.placeholder(tf.float32, [None, n_input])
     y = tf.placeholder(tf.float32)
 
     train_loss_plot = [[], []]
@@ -211,15 +245,15 @@ if __name__ == "__main__":
     print("Starting training")
     train_neural_network(x)
 
+    #print(get_train_batch(50))
+
     print("Plotting progress")
+    plt.subplot(2,1,1)
     plt.plot(train_loss_plot[0], train_loss_plot[1], label='Train loss')
     plt.plot(test_loss_plot[0], test_loss_plot[1], label='Test loss')
     plt.legend(loc='best')
-    plt.xlabel("Epoch")
-    plt.title('Cost function')
-    plt.show()
+    plt.subplot(2, 1, 2)
     plt.plot(test_acc_plot[0], test_acc_plot[1], label='Test Acc')
     plt.legend(loc='best')
     plt.xlabel("Epoch")
-    plt.title("Accuracy")
     plt.show()

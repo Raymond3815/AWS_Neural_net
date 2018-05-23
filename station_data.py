@@ -155,7 +155,7 @@ if __name__ == "__main__":
     #plt.show()
 
     # Generate mean plot to detect outliers
-    plotCols = ['Rain_{Tot}', 'Tair', 'vapor_pressure_{Avg}',  'WindSpd_{Avg}']
+    plotCols = ['Tair', 'RH', 'vapor_pressure_{Avg}',  'WindSpd_{Avg}', 'WindDir_{Avg}', 'Rain_{Tot}']
     for c in plotCols:
 
         all_rain = []

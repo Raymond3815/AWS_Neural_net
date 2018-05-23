@@ -193,7 +193,7 @@ def generateInputOutputMultipleStations(combinedData = None, otherStations=2, th
         combinedData[stations[neighboringStations[0][0]]]['data'].loc[:, combinedData[stations[neighboringStations[0][0]]]['data'].columns != 'Radar_{Tot}' ].add_suffix('_1'),
         left_index=True, right_index=True, copy=False
         )
-        for n in range(1,otherStations):
+        for n in range(1, otherStations):
             mergedSet = pd.merge(mergedSet,
                                  combinedData[stations[neighboringStations[n][0]]]['data'].loc[:, combinedData[stations[neighboringStations[n][0]]]['data'].columns != 'Radar_{Tot}' ].add_suffix('_' + str(n+1)),
                                  left_index=True, right_index=True, copy=False)
