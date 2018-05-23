@@ -17,6 +17,7 @@ def load_and_normalize_feed(path, otherStations=2, previousTimes=2, nrow=None):
     # do all distances
     # set = np.arange(0,otherStations*2, 2)
 
+
     print("Normalizing:", path)
 
     # calculate smallest angle difference to previous value in wind direction
@@ -68,7 +69,7 @@ def load_and_normalize_feed(path, otherStations=2, previousTimes=2, nrow=None):
 
 
 def get_train_batch(batch_size):
-    n_true = batch_size // 3
+    n_true = int(batch_size / (train_size/len(train_true)))
     n_false = batch_size - n_true
 
     n_true_sel = np.random.randint(0, len(train_true), size=n_true)
@@ -87,7 +88,7 @@ def get_train_batch(batch_size):
 def get_test_batch(batch_size = None): # send all
     if (batch_size == None):
         batch_size = test_size
-    n_true = batch_size // 3
+    n_true = int(batch_size / (test_size/len(test_true)))
     n_false = batch_size - n_true
 
     n_true_sel = np.random.randint(0, len(test_true), size=n_true)
@@ -105,10 +106,12 @@ def get_test_batch(batch_size = None): # send all
 
 def neural_network_model(data):
     # hyper parameters
-    n_hidden_1 = 100
-    n_hidden_2 = 25
+    n_hidden_1 = 120
+    n_hidden_2 = 20
     n_input = 78
     n_output = 2
+
+    print("Variables:", (n_input+1)*n_hidden_1 + (n_hidden_1+1)*n_hidden_2 + (n_hidden_2 + 1)*n_output)
 
     h_l_1 = {'weights': tf.Variable(tf.random_normal([n_input, n_hidden_1])),
              'biases': tf.Variable(tf.random_normal([n_hidden_1]))}
@@ -122,11 +125,11 @@ def neural_network_model(data):
 
 
     l1 = data @ h_l_1['weights'] + h_l_1['biases']
-    l1 = tf.nn.sigmoid(l1)
+    l1 = tf.nn.tanh(l1)
 
 
     l2 = l1 @ h_l_2['weights'] + h_l_2['biases']
-    l2 = tf.nn.sigmoid(l2)
+    l2 = tf.nn.tanh(l2)
 
 
 
@@ -141,8 +144,13 @@ def train_neural_network(x):
     cost = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(logits=prediction, labels=y))
     optimizer = tf.train.AdamOptimizer().minimize(cost)
 
-    correct = tf.equal(tf.argmax(prediction, 1), tf.argmax(tf.nn.softmax(y), 1))
-    accuracy = tf.reduce_mean(tf.cast(correct, 'float'))
+
+    s_prediction = tf.nn.softmax(prediction)
+
+    false_positive = tf.reduce_mean(tf.cast(tf.equal(tf.argmax(s_prediction, 1)-tf.argmax(y, 1), 1), tf.float32))
+
+    correct = tf.equal(tf.argmax(s_prediction, 1), tf.argmax(y, 1))
+    accuracy = tf.reduce_mean(tf.cast(correct, tf.float32))
 
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
@@ -154,17 +162,20 @@ def train_neural_network(x):
                 epoch_x, epoch_y = get_train_batch(batch_size)
                 _, c = sess.run([optimizer, cost], feed_dict={x: epoch_x, y: epoch_y})
                 epoch_loss += c
+
+            epoch_loss /= int(train_size/batch_size)
+
             train_loss_plot[0].append(epoch)
             train_loss_plot[1].append(epoch_loss)
             if (epoch % display_step == 0):
                 test_x, test_y = get_test_batch()
-                t_loss =  cost.eval({x: test_x, y: test_y})
-                acc = accuracy.eval({x: test_x, y: test_y})
+                t_loss, acc, f_p =  sess.run([cost, accuracy, false_positive], feed_dict={x: test_x, y: test_y})
                 test_loss_plot[0].append(epoch)
                 test_loss_plot[1].append(t_loss)
                 test_acc_plot[0].append(epoch)
                 test_acc_plot[1].append(acc)
-                print('Epoch', epoch, '\t Train loss:', epoch_loss, "\t\t Test loss:",t_loss, '\t\t Test acc:', acc)
+                print('Epoch', epoch, '\t Train loss:', epoch_loss,
+                      "\t\t Test loss:",t_loss, '\t\t Test acc:', acc, '\t False pos:', f_p, 'False neg:', 1-acc-f_p)
 
 
 if __name__ == "__main__":
@@ -173,11 +184,11 @@ if __name__ == "__main__":
 
     bp = "C:\\Users\\raymo\\Desktop\\nn_input\\"
     train_true = load_and_normalize_feed(bp + "raw_3+1_station_-10+15min_train_heavy.csv", otherStations=3, previousTimes=2)
-    train_false = load_and_normalize_feed(bp + "raw_3+1_station_-10+15min_train_non_heavy.csv", otherStations=3, previousTimes=2, nrow=2*len(train_true))
+    train_false = load_and_normalize_feed(bp + "raw_3+1_station_-10+15min_train_non_heavy.csv", otherStations=3, previousTimes=2, nrow=8*len(train_true))
     train_size = len(train_true) + len(train_false)
     print("Train length:", train_size)
     test_true = load_and_normalize_feed(bp + "raw_3+1_station_-10+15min_test_heavy.csv", otherStations=3, previousTimes=2)
-    test_false = load_and_normalize_feed(bp + "raw_3+1_station_-10+15min_test_non_heavy.csv", otherStations=3, previousTimes=2, nrow=2*len(test_true))
+    test_false = load_and_normalize_feed(bp + "raw_3+1_station_-10+15min_test_non_heavy.csv", otherStations=3, previousTimes=2, nrow=10*len(test_true))
     test_size = len(test_true) + len(test_false)
     print("Train length:", test_size)
 
@@ -185,9 +196,9 @@ if __name__ == "__main__":
 
     print("Initializing NN")
     # learning_rate = 0.001
-    n_epoch = 10000 + 1
+    n_epoch = 1000 + 1
     display_step = 100
-    batch_size = 2048
+    batch_size = 1024
 
 
     x = tf.placeholder(tf.float32, [None, 78])
@@ -207,7 +218,7 @@ if __name__ == "__main__":
     plt.xlabel("Epoch")
     plt.title('Cost function')
     plt.show()
-    plt.plot(test_acc_plot[0], test_acc_plot[1])
+    plt.plot(test_acc_plot[0], test_acc_plot[1], label='Test Acc')
     plt.legend(loc='best')
     plt.xlabel("Epoch")
     plt.title("Accuracy")

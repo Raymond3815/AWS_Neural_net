@@ -115,7 +115,7 @@ if __name__ == "__main__":
 
     ## NOTE Oommoord has a error in CSV at line 453856 (after processing, look for 2018-02-12 05:40)
     ## data gap of 30 minutes
-    sDict = loadStationToDict(['Oost'], forceDownload=False);
+    sDict = loadStationToDict(['Oost', 'Capelle', 'Delfshaven', 'Lansingerland', 'Ommoord', 'Rijnhaven', 'SpaansePolder'], forceDownload=False);
 
 
 
