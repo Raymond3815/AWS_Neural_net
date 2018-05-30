@@ -117,12 +117,6 @@ if __name__ == "__main__":
     ## data gap of 30 minutes
     sDict = loadStationToDict(['Oost', 'Capelle', 'Delfshaven', 'Lansingerland', 'Ommoord', 'Rijnhaven', 'SpaansePolder'], forceDownload=False);
 
-
-
-
-
-
-
     #exit() ## remove this to make plots
 
     ## Generate count plot
