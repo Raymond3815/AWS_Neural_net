@@ -100,7 +100,7 @@ def load_and_normalize_feed(path, otherStations=2, previousTimes=2, nrow=None):
     # time stamps
     # set = np.arange(30, 78)
 
-    ##data = np.delete(data, np.s_[set], 1)
+    data = np.delete(data, np.s_[set], 1)
 
     return data
 
@@ -116,9 +116,10 @@ def get_train_batch(batch_size):
     x = np.concatenate((
         train_true[n_true_sel], train_false[n_false_sel]
     ))
-    y = np.zeros((batch_size, 2))
-    y[:n_true, 0] = 1
-    y[n_true:, 1] = 1
+    y = np.zeros(batch_size)
+
+    y[:n_true] = 1.0
+    #y[n_true:, 1] = 1
 
 
     return x, y
@@ -136,9 +137,9 @@ def get_test_batch(batch_size=None): # send all
     x = np.concatenate((
         test_true[n_true_sel], test_false[n_false_sel]
     ))
-    y = np.zeros((batch_size, 2))
-    y[:n_true, 0] = 1
-    y[n_true:, 1] = 1
+    y = np.zeros(batch_size)
+    y[:n_true] = 1.0
+    #y[n_true:, 1] = 1
 
     return x, y
 
@@ -169,7 +170,8 @@ def train_neural_network(prediction_sigmoid, pos_weight=1):
     cost = tf.reduce_mean(weighted_loss)
     optimizer = tf.train.AdamOptimizer().minimize(cost)
 
-    correct = tf.equal(tf.argmax(prediction_sigmoid, 1), tf.argmax(y, 1))
+    predicted_class = tf.greater_equal(prediction_sigmoid, 0.5)
+    correct = tf.equal(predicted_class, tf.equal(y, 1.0))
     accuracy = tf.reduce_mean(tf.cast(correct, tf.float32))
 
     with tf.Session() as sess:
@@ -188,7 +190,7 @@ def train_neural_network(prediction_sigmoid, pos_weight=1):
             train_loss_plot[1].append(epoch_loss)
 
             if epoch % display_step == 0:
-                test_x, test_y = get_test_batch()
+                test_x, test_y = get_test_batch(1024) # way to small but first trying to reduce training loss more
                 t_loss, acc = sess.run([cost, accuracy], feed_dict={x: test_x, y: test_y})
 
                 heavy_rain_acc = accuracy.eval({x: test_true, y: test_true_y})  # TP/ FN
@@ -229,8 +231,7 @@ if __name__ == "__main__":
                                          otherStations=3, previousTimes=2)
     test_size = len(test_true) + len(test_false)
     print("Test length:", test_size, 'ratio:', len(test_true) / test_size)
-    test_true_y = np.zeros((len(test_true), 2))
-    test_true_y[:, 0] = 1
+    test_true_y = np.ones(len(test_true))
 
     # hyper parameters
     n_epoch = 500 + 1
@@ -243,7 +244,7 @@ if __name__ == "__main__":
 
     print(n_input, 'inputs')
 
-    arr_node_conf = [[40, 15, 2]]
+    arr_node_conf = [[40, 15, 1]]
     ''',
                      [50, 5, 2],
                      [100, 2],
