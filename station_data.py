@@ -115,15 +115,15 @@ if __name__ == "__main__":
 
     ## NOTE Oommoord has a error in CSV at line 453856 (after processing, look for 2018-02-12 05:40)
     ## data gap of 30 minutes
-    sDict = loadStationToDict(['Oost', 'Capelle', 'Delfshaven', 'Lansingerland', 'Ommoord', 'Rijnhaven', 'SpaansePolder'], forceDownload=False);
+    sDict = loadStationToDict(["Capelle", "Delfshaven", "Lansingerland", "Ommoord", "Ridderkerk", "Oost", "SpaansePolder", 'Rijnhaven'], forceDownload=False);
 
     #exit() ## remove this to make plots
 
     ## Generate count plot
-    period = 'W'
+    period = 'Y'
     for s in sDict.keys():
         print("Analysing", s)
-        cols = sDict[s]['data'].keys()
+        cols = ["Rain_{Tot}"] # sDict[s]['data'].keys()
         hourCountSum = sDict[s]['data'][cols[0]].resample(period, kind = 'period').count()
         for i in range(1, len(cols)):
             hourCountSum += sDict[s]['data'][cols[i]].resample(period, kind = 'period').count()
@@ -131,9 +131,9 @@ if __name__ == "__main__":
 
     plt.title("Measurement count (sum of col count) period set to " + period)
     plt.legend(loc='best')
-    #plt.show()
+    plt.show()
 
-    period = 'M'
+    period = 'Y'
     theshold = 8 # mm/h (fairly good pick)
     for s in sDict.keys():
         if (s == 'Ridderkerk'):
@@ -146,7 +146,7 @@ if __name__ == "__main__":
 
     plt.title("Measurement count (sum of high intensity count) period set to " + period)
     plt.legend(loc='best')
-    #plt.show()
+    plt.show()
 
     # Generate mean plot to detect outliers
     plotCols = ['Tair', 'RH', 'vapor_pressure_{Avg}',  'WindSpd_{Avg}', 'WindDir_{Avg}', 'Rain_{Tot}']
@@ -161,12 +161,13 @@ if __name__ == "__main__":
             all_rain = np.concatenate((all_rain, sDict[s]['data'][c].values))
 
             i+=1
-            #plt.subplot(5,2,i)
+            plt.subplot(5,2,i)
             #subcel.box()
-            #plt.legend([s], loc='best')
+            sDict[s]['data'][c].resample('W', kind='period').sum().plot()
+            plt.legend([s], loc='best')
             #plt.title(c)
 
-        #plt.show()
+        plt.show()
 
         std, mu = 0, 0
 

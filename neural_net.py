@@ -100,7 +100,7 @@ def load_and_normalize_feed(path, otherStations=2, previousTimes=2, nrow=None):
     # time stamps
     # set = np.arange(30, 78)
 
-    data = np.delete(data, np.s_[set], 1)
+    #data = np.delete(data, np.s_[set], 1)
 
     return data
 
@@ -156,19 +156,27 @@ def neural_network_model(input_feed, input_size, layer_size):
             'biases': tf.Variable(tf.random_normal([size]))
         })
 
+
+
         layer.append(tf.nn.sigmoid(layer[n_layer] @ tfVar[n_layer]['weights'] + tfVar[n_layer]['biases']))
         var_count += (1 + prevLay) * size
         prevLay = size
         n_layer += 1
 
+    # fix last layer (not applying activation function)
+    layer[-1] = layer[-2] @ tfVar[-1]['weights'] + tfVar[-1]['biases']
+    print(len(layer), len(tfVar))
+
     print(n_layer-1, 'hidden layers, containing', var_count, 'variables')
     return layer[-1], tfVar
 
 
-def train_neural_network(prediction_sigmoid, pos_weight=1):
-    weighted_loss = tf.nn.weighted_cross_entropy_with_logits(targets=y, logits=prediction_sigmoid, pos_weight=pos_weight)
+def train_neural_network(prediction, pos_weight=1):
+    weighted_loss = tf.nn.weighted_cross_entropy_with_logits(targets=y, logits=prediction, pos_weight=pos_weight)
     cost = tf.reduce_mean(weighted_loss)
     optimizer = tf.train.AdamOptimizer().minimize(cost)
+
+    prediction_sigmoid = tf.nn.sigmoid(prediction)
 
     predicted_class = tf.greater_equal(prediction_sigmoid, 0.5)
     correct = tf.equal(predicted_class, tf.equal(y, 1.0))
@@ -190,7 +198,7 @@ def train_neural_network(prediction_sigmoid, pos_weight=1):
             train_loss_plot[1].append(epoch_loss)
 
             if epoch % display_step == 0:
-                test_x, test_y = get_test_batch(1024) # way to small but first trying to reduce training loss more
+                test_x, test_y = get_test_batch(10240) # way to small but first trying to reduce training loss more
                 t_loss, acc = sess.run([cost, accuracy], feed_dict={x: test_x, y: test_y})
 
                 heavy_rain_acc = accuracy.eval({x: test_true, y: test_true_y})  # TP/ FN
