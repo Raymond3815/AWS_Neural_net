@@ -3,7 +3,7 @@ import numpy as np
 from pandas import read_csv
 import matplotlib.pyplot as plt
 from datetime import datetime
-
+from pandas import DataFrame
 
 def load_and_normalize_feed(path, otherStations=2, previousTimes=2, nrow=None):
     if (nrow != None):
@@ -158,7 +158,7 @@ def neural_network_model(input_feed, input_size, layer_size):
             'biases': tf.Variable(tf.random_normal([size]))
         })
 
-        layer.append(tf.nn.tanh(layer[n_layer] @ tf_var[n_layer]['weights'] + tf_var[n_layer]['biases']))
+        layer.append(tf.nn.sigmoid(layer[n_layer] @ tf_var[n_layer]['weights'] + tf_var[n_layer]['biases']))
         var_count += (1 + prev_lay) * size
         prev_lay = size
         n_layer += 1
@@ -180,6 +180,10 @@ def train_neural_network(prediction, pos_weight=1):
     predicted_class = tf.greater_equal(prediction_s, 0.5)
     correct = tf.equal(predicted_class, tf.equal(y, 1.0))
     accuracy = tf.reduce_mean(tf.cast(correct, tf.float32))
+
+
+    outputCsv = []
+    outputCsv.append(['Epoch', 'Train loss', 'Train acc', "Test loss", 'Test acc', 'heavy rain acc', 'TP', 'FN', 'TN', 'FP'])
 
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
@@ -216,12 +220,18 @@ def train_neural_network(prediction, pos_weight=1):
                       '\t heavy rain acc:', heavy_rain_acc,
                       '\tTP:', true_pos, 'FN:', false_neg, 'TN:', true_neg, 'FP:', false_pos
                       )
+                outputCsv.append([epoch, epoch_loss, train_acc, t_loss, acc, heavy_rain_acc, true_pos, false_neg, true_neg, false_pos])
+
+    struc = DataFrame(outputCsv[1:], columns=outputCsv[0])
+    struc.set_index("Epoch", inplace=True)
+    struc.to_csv("training_output\\" + str(datetime.now().strftime("%Y-%m-%d %H=%M=%S")) + '.csv')
 
 
 if __name__ == "__main__":
+
     print("Loading in data ...")
 
-    nNoHeavy = 2
+    nNoHeavy = 25
     print('Ratio not-heavy:heavy', nNoHeavy)
 
     # Constant variables based on data_management.py
@@ -242,7 +252,7 @@ if __name__ == "__main__":
     test_true_y[:, 0] = 1.0
 
     # hyper parameters
-    n_epoch = 50 + 1
+    n_epoch = 500 + 1
     display_step = 50
     batch_size = 128
 
@@ -259,8 +269,8 @@ if __name__ == "__main__":
                      [30, 2]
                      ]
     '''
-    pos_weight_arr = [0.1, 1, 2]
-    plt.figure(figsize=[16,9])
+    pos_weight_arr = [5, 10, 20]
+    plt.figure(figsize=[18, 10])
     for j in range(len(pos_weight_arr)):
         p_w = pos_weight_arr[j]
         for i in range(len(arr_node_conf)):
@@ -285,6 +295,5 @@ if __name__ == "__main__":
             plt.legend(loc='best')
             plt.xlabel("Epoch")
 
-
+    plt.savefig("training_output\\" + str(datetime.now().strftime("%Y-%m-%d %H=%M=%S")) + '.png')
     plt.show()
-    plt.savefig(str(datetime.now().strftime("%Y-%m-%d %H=%M")) + '.png')
