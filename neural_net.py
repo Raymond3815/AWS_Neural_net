@@ -116,10 +116,10 @@ def get_train_batch(batch_size):
     x = np.concatenate((
         train_true[n_true_sel], train_false[n_false_sel]
     ))
-    y = np.zeros(batch_size)
+    y = np.zeros([batch_size, 1])
 
-    y[:n_true] = 1.0
-    #y[n_true:, 1] = 1
+    y[:n_true, 0] = 1.0
+    #y[n_true:, 1] = 1.0
 
 
     return x, y
@@ -137,9 +137,11 @@ def get_test_batch(batch_size=None): # send all
     x = np.concatenate((
         test_true[n_true_sel], test_false[n_false_sel]
     ))
-    y = np.zeros(batch_size)
-    y[:n_true] = 1.0
-    #y[n_true:, 1] = 1
+
+    y = np.zeros([batch_size, 1])
+
+    y[:n_true, 0] = 1.0
+    #y[n_true:, 1] = 1.0
 
     return x, y
 
@@ -147,28 +149,25 @@ def get_test_batch(batch_size=None): # send all
 def neural_network_model(input_feed, input_size, layer_size):
     n_layer = 0
     var_count = 0
-    tfVar = []
+    tf_var = []
     layer = [input_feed]
-    prevLay = input_size
+    prev_lay = input_size
     for size in layer_size:
-        tfVar.append({
-            'weights': tf.Variable(tf.random_normal([prevLay, size])),
+        tf_var.append({
+            'weights': tf.Variable(tf.random_normal([prev_lay, size])),
             'biases': tf.Variable(tf.random_normal([size]))
         })
 
-
-
-        layer.append(tf.nn.sigmoid(layer[n_layer] @ tfVar[n_layer]['weights'] + tfVar[n_layer]['biases']))
-        var_count += (1 + prevLay) * size
-        prevLay = size
+        layer.append(tf.nn.tanh(layer[n_layer] @ tf_var[n_layer]['weights'] + tf_var[n_layer]['biases']))
+        var_count += (1 + prev_lay) * size
+        prev_lay = size
         n_layer += 1
 
     # fix last layer (not applying activation function)
-    layer[-1] = layer[-2] @ tfVar[-1]['weights'] + tfVar[-1]['biases']
-    print(len(layer), len(tfVar))
+    layer[-1] = layer[-2] @ tf_var[-1]['weights'] + tf_var[-1]['biases']
 
     print(n_layer-1, 'hidden layers, containing', var_count, 'variables')
-    return layer[-1], tfVar
+    return layer[-1], tf_var
 
 
 def train_neural_network(prediction, pos_weight=1):
@@ -176,9 +175,9 @@ def train_neural_network(prediction, pos_weight=1):
     cost = tf.reduce_mean(weighted_loss)
     optimizer = tf.train.AdamOptimizer().minimize(cost)
 
-    prediction_sigmoid = tf.nn.sigmoid(prediction)
+    prediction_s = tf.nn.sigmoid(prediction)
 
-    predicted_class = tf.greater_equal(prediction_sigmoid, 0.5)
+    predicted_class = tf.greater_equal(prediction_s, 0.5)
     correct = tf.equal(predicted_class, tf.equal(y, 1.0))
     accuracy = tf.reduce_mean(tf.cast(correct, tf.float32))
 
@@ -198,7 +197,7 @@ def train_neural_network(prediction, pos_weight=1):
             train_loss_plot[1].append(epoch_loss)
 
             if epoch % display_step == 0:
-                test_x, test_y = get_test_batch(10240) # way to small but first trying to reduce training loss more
+                test_x, test_y = get_test_batch() # way to small but first trying to reduce training loss more
                 t_loss, acc = sess.run([cost, accuracy], feed_dict={x: test_x, y: test_y})
 
                 heavy_rain_acc = accuracy.eval({x: test_true, y: test_true_y})  # TP/ FN
@@ -232,23 +231,24 @@ if __name__ == "__main__":
     train_false = load_and_normalize_feed(bp + "raw_3+1_station_-10+15min_train_non_heavy.csv",
                                           otherStations=3, previousTimes=2, nrow=nNoHeavy*len(train_true))
     train_size = len(train_true) + len(train_false)
-    print("Train length:", train_size, 'ratio:', len(train_true)/train_size)
+    print("Train length:", train_size, 'ratio:', len(train_false)/len(train_true))
     test_true = load_and_normalize_feed(bp + "raw_3+1_station_-10+15min_test_heavy.csv",
                                         otherStations=3, previousTimes=2)
     test_false = load_and_normalize_feed(bp + "raw_3+1_station_-10+15min_test_non_heavy.csv",
                                          otherStations=3, previousTimes=2)
     test_size = len(test_true) + len(test_false)
-    print("Test length:", test_size, 'ratio:', len(test_true) / test_size)
-    test_true_y = np.ones(len(test_true))
+    print("Test length:", test_size, 'ratio:', len(test_false) / len(test_true))
+    test_true_y = np.zeros([len(test_true), 1])
+    test_true_y[:, 0] = 1.0
 
     # hyper parameters
-    n_epoch = 500 + 1
+    n_epoch = 50 + 1
     display_step = 50
     batch_size = 128
 
     n_input = len(test_true[0])
     x = tf.placeholder(tf.float32, [None, n_input])
-    y = tf.placeholder(tf.float32)
+    y = tf.placeholder(tf.float32, [None, 1])
 
     print(n_input, 'inputs')
 
@@ -259,27 +259,32 @@ if __name__ == "__main__":
                      [30, 2]
                      ]
     '''
-    for i in range(len(arr_node_conf)):
-        print("Initializing NN", arr_node_conf[i])
+    pos_weight_arr = [0.1, 1, 2]
+    plt.figure(figsize=[16,9])
+    for j in range(len(pos_weight_arr)):
+        p_w = pos_weight_arr[j]
+        for i in range(len(arr_node_conf)):
+            print("Initializing NN", arr_node_conf[i], 'pos_weight =', p_w)
 
-        train_loss_plot = [[], []]
-        test_loss_plot = [[], []]
-        test_acc_plot = [[], []]
+            train_loss_plot = [[], []]
+            test_loss_plot = [[], []]
+            test_acc_plot = [[], []]
 
-        print("Starting training, at", datetime.now())
-        prediction, variables = neural_network_model(x, n_input, arr_node_conf[i])
-        train_neural_network(prediction, 1)
+            print("Starting training, at", datetime.now())
+            prediction_scheme, variables = neural_network_model(x, n_input, arr_node_conf[i])
+            train_neural_network(prediction_scheme, p_w)
 
-        print("Plotting progress")
-        plt.subplot(len(arr_node_conf), 2, i*2+1)
-        plt.plot(train_loss_plot[0], train_loss_plot[1], label='Train loss ' + str(arr_node_conf[i]))
-        plt.plot(test_loss_plot[0], test_loss_plot[1], label='Test loss ' + str(arr_node_conf[i]))
-        plt.xlabel("Epoch")
-        plt.legend(loc='best')
-        plt.subplot(len(arr_node_conf), 2, i*2 + 2)
-        plt.plot(test_acc_plot[0], test_acc_plot[1], label='Test Acc ' + str(arr_node_conf[i]))
-        plt.legend(loc='best')
-        plt.xlabel("Epoch")
+            print("Plotting progress")
+            plt.subplot(len(arr_node_conf) * len(pos_weight_arr), 2, (i + len(arr_node_conf) * j)*2 + 1)
+            plt.plot(train_loss_plot[0], train_loss_plot[1], label='Train loss ' + str(arr_node_conf[i]) + ', p_w=' + str(p_w))
+            plt.plot(test_loss_plot[0], test_loss_plot[1], label='Test loss ' + str(arr_node_conf[i]) + ', p_w=' + str(p_w))
+            plt.xlabel("Epoch")
+            plt.legend(loc='best')
+            plt.subplot(len(arr_node_conf) * len(pos_weight_arr), 2, (i + len(arr_node_conf) * j) * 2 + 2)
+            plt.plot(test_acc_plot[0], test_acc_plot[1], label='Test Acc ' + str(arr_node_conf[i]) + ', p_w=' + str(p_w))
+            plt.legend(loc='best')
+            plt.xlabel("Epoch")
+
 
     plt.show()
-    print("Done")
+    plt.savefig(str(datetime.now().strftime("%Y-%m-%d %H=%M")) + '.png')
